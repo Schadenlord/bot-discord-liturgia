@@ -2,6 +2,7 @@ import os
 import discord
 import feedparser
 import json
+import re
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -19,7 +20,7 @@ GUID_FILE = "sent_guids.json"
 
 # Configuração dos intents do Discord
 intents = discord.Intents.default()
-intents.message_content = True  # precisa disso para on_message funcionar
+intents.message_content = True
 client = discord.Client(intents=intents)
 scheduler = AsyncIOScheduler()
 
@@ -59,6 +60,11 @@ def save_guids():
 
 config = load_config()
 
+# Função para formatar parágrafos corretamente
+def format_paragraphs(text):
+    paragraphs = re.split(r'\n{2,}', text.strip())
+    return '\n\n'.join(' '.join(p.splitlines()) for p in paragraphs)
+
 # Parse the RSS content
 def parse_sections(html):
     soup = BeautifulSoup(html, "html.parser")
@@ -73,7 +79,7 @@ def parse_sections(html):
             sec["evangelho"] += text + "\n\n"
         else:
             sec["reflexao"] += text + "\n\n"
-    return sec
+    return {k: format_paragraphs(v) for k, v in sec.items()}
 
 # Build the Discord embed message
 def build_embed(title, date, sec):
@@ -120,14 +126,9 @@ async def fetch_and_send():
 @client.event
 async def on_ready():
     print(f"[INFO] Bot conectado como {client.user}")
-    
-    # Envia imediatamente ao iniciar
     await fetch_and_send()
-
-    # Agenda envio diário às 08:00 (hora de Brasília)
     scheduler.add_job(fetch_and_send, CronTrigger(hour=8, minute=0, timezone="America/Sao_Paulo"))
     scheduler.start()
-
     print("[INFO] Agendamento iniciado.")
 
 # Evento: quando o bot recebe mensagens
@@ -136,7 +137,6 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    # Comando para definir canal
     if message.content.lower().startswith("!definir"):
         guild_id = str(message.guild.id)
         channel_id = str(message.channel.id)
@@ -144,12 +144,11 @@ async def on_message(message):
         save_config(config)
         await message.channel.send("✅ Este canal foi definido para receber a Palavra do Dia diariamente!")
 
-    # Comando para testar envio imediato
     elif message.content.lower().startswith("!testar"):
         await fetch_and_send()
         await message.channel.send("✅ Palavra do Dia enviada manualmente.")
 
-# Função para manter o bot ativo
+# Manter o bot vivo
 keep_alive()
 
 # Executa o bot
