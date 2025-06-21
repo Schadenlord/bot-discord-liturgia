@@ -3,3 +3,4 @@ feedparser
 apscheduler
 python-dotenv
 beautifulsoup4
+pytz

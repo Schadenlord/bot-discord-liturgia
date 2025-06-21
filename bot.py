@@ -11,11 +11,21 @@ from bs4 import BeautifulSoup
 # Load environment variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 RSS_URL = os.getenv("RSS_URL")
-
-# GUID log
+CONFIG_FILE = "config.json"
 GUID_FILE = "sent_guids.json"
+
+# Load config and sent_guids
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_config(config):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f)
+
 if os.path.exists(GUID_FILE):
     with open(GUID_FILE, "r") as f:
         sent_guids = set(json.load(f))
@@ -26,11 +36,13 @@ def save_guids():
     with open(GUID_FILE, "w") as f:
         json.dump(list(sent_guids), f)
 
-# Parse content into sections
+config = load_config()
+
+# Parse the RSS content
 def parse_sections(html):
     soup = BeautifulSoup(html, "html.parser")
     paras = [p.get_text(strip=True) for p in soup.find_all("p") if p.get_text(strip=True)]
-
+    
     sec = {"leitura": "", "evangelho": "", "reflexao": ""}
     for text in paras:
         lower = text.lower()
@@ -42,7 +54,7 @@ def parse_sections(html):
             sec["reflexao"] += text + "\n\n"
     return sec
 
-# Create the embed message
+# Build the Discord embed message
 def build_embed(title, date, sec):
     embed = discord.Embed(
         title=f"📖 Palavra do Dia – {title}",
@@ -59,26 +71,11 @@ def build_embed(title, date, sec):
 
 # Discord setup
 intents = discord.Intents.default()
+intents.message_content = True  # Necessário para !comandos funcionarem
 client = discord.Client(intents=intents)
 scheduler = AsyncIOScheduler()
 
-TEST_MODE = os.getenv("TEST_MODE", "false").lower() == "true"
-
-CONFIG_FILE = "config.json"
-
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-def save_config(config):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f)
-
-config = load_config()
-
-
+# Função principal que busca e envia a mensagem
 async def fetch_and_send():
     try:
         feed = feedparser.parse(RSS_URL)
@@ -104,11 +101,27 @@ async def fetch_and_send():
     except Exception as e:
         print("[ERRO]", str(e))
 
+# Evento: quando o bot está pronto
+@client.event
+async def on_ready():
+    print(f"[INFO] Bot conectado como {client.user}")
+    
+    # Envia imediatamente ao iniciar
+    await fetch_and_send()
+
+    # Agenda envio diário às 08:00 (hora de Brasília)
+    scheduler.add_job(fetch_and_send, CronTrigger(hour=8, minute=0, timezone="America/Sao_Paulo"))
+    scheduler.start()
+
+    print("[INFO] Agendamento iniciado.")
+
+# Evento: quando o bot recebe mensagens
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
 
+    # Comando para definir canal
     if message.content.lower().startswith("!definir"):
         guild_id = str(message.guild.id)
         channel_id = str(message.channel.id)
@@ -116,18 +129,10 @@ async def on_message(message):
         save_config(config)
         await message.channel.send("✅ Este canal foi definido para receber a Palavra do Dia diariamente!")
 
-@client.event
-async def on_ready():
-    print(f"[INFO] Bot conectado como {client.user}")
+    # Comando para testar envio imediato
+    elif message.content.lower().startswith("!testar"):
+        await fetch_and_send()
+        await message.channel.send("✅ Palavra do Dia enviada manualmente.")
 
-    # Envia imediatamente ao iniciar
-    await fetch_and_send()
-
-    # Continua com agendamento diário às 08:00
-    scheduler.add_job(fetch_and_send, CronTrigger(hour=8, minute=0, timezone="America/Sao_Paulo"))
-    scheduler.start()
-
-    print("[INFO] Agendamento iniciado.")
-
-
+# Executa o bot
 client.run(TOKEN)
