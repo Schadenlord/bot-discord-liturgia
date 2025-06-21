@@ -7,6 +7,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
+from flask import Flask
+from threading import Thread
 
 # Load environment variables
 load_dotenv()
@@ -20,6 +22,19 @@ intents = discord.Intents.default()
 intents.message_content = True  # precisa disso para on_message funcionar
 client = discord.Client(intents=intents)
 scheduler = AsyncIOScheduler()
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot online!", 200
+
+def run():
+    app.run(host="0.0.0.0", port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
 # Load config and sent_guids
 def load_config():
