@@ -15,6 +15,12 @@ RSS_URL = os.getenv("RSS_URL")
 CONFIG_FILE = "config.json"
 GUID_FILE = "sent_guids.json"
 
+# Configuração dos intents do Discord
+intents = discord.Intents.default()
+intents.message_content = True  # precisa disso para on_message funcionar
+client = discord.Client(intents=intents)
+scheduler = AsyncIOScheduler()
+
 # Load config and sent_guids
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -68,12 +74,6 @@ def build_embed(title, date, sec):
     if sec["reflexao"]:
         embed.add_field(name="🕊️ Reflexão", value=sec["reflexao"][:1024], inline=False)
     return embed
-
-# Discord setup
-intents = discord.Intents.default()
-intents.message_content = True  # Necessário para !comandos funcionarem
-client = discord.Client(intents=intents)
-scheduler = AsyncIOScheduler()
 
 # Função principal que busca e envia a mensagem
 async def fetch_and_send():
@@ -133,6 +133,9 @@ async def on_message(message):
     elif message.content.lower().startswith("!testar"):
         await fetch_and_send()
         await message.channel.send("✅ Palavra do Dia enviada manualmente.")
+
+# Função para manter o bot ativo
+keep_alive()
 
 # Executa o bot
 client.run(TOKEN)
