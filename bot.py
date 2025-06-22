@@ -1,9 +1,9 @@
 import os
 import discord
-import feedparser
+import requests
 import json
 import re
-from datetime import datetime
+from datetime import date
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
@@ -11,14 +11,10 @@ from bs4 import BeautifulSoup
 from flask import Flask
 from threading import Thread
 
-# Load environment variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-RSS_URL = os.getenv("RSS_URL")
 CONFIG_FILE = "config.json"
-GUID_FILE = "sent_guids.json"
 
-# Configuração dos intents do Discord
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
@@ -37,7 +33,6 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# Load config and sent_guids
 def load_config():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
@@ -48,93 +43,41 @@ def save_config(config):
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f)
 
-if os.path.exists(GUID_FILE):
-    with open(GUID_FILE, "r") as f:
-        sent_guids = set(json.load(f))
-else:
-    sent_guids = set()
-
-def save_guids():
-    with open(GUID_FILE, "w") as f:
-        json.dump(list(sent_guids), f)
-
 config = load_config()
 
-# Função para formatar parágrafos corretamente
-def format_paragraphs(text):
-    paragraphs = re.split(r'\n{2,}', text.strip())
-    return '\n\n'.join(' '.join(p.splitlines()) for p in paragraphs)
-
-def limpar_html(html):
-    soup = BeautifulSoup(html, 'html.parser')
+def limpar_html(texto):
+    soup = BeautifulSoup(texto, 'html.parser')
     text = soup.get_text(separator=' ')
-    text = re.sub(r'\s+', ' ', text).strip()
-    text = re.sub(r'\s+([.,;!?])', r'\1', text)
+    text = re.sub(r'\\s+', ' ', text).strip()
     return text
 
-def dividir_em_blocos(texto):
-    leitura = evangelho = reflexao = ""
-    if "Proclamação do Evangelho" in texto:
-        partes = texto.split("Proclamação do Evangelho de Jesus Cristo segundo")
-        leitura = partes[0].strip()
-        resto = "Proclamação do Evangelho de Jesus Cristo segundo" + partes[1]
-        if "Prefiro gloriar-me das minhas fraquezas" in resto:
-            partes_ev = resto.split("Prefiro gloriar-me das minhas fraquezas")
-            evangelho = partes_ev[0].strip()
-            reflexao = "Prefiro gloriar-me das minhas fraquezas" + partes_ev[1]
-        else:
-            evangelho = resto.strip()
-            reflexao = ""
-    else:
-        leitura = texto
-        evangelho = ""
-        reflexao = ""
-    return leitura, evangelho, reflexao
+def fetch_liturgia_api_nova():
+    hoje = date.today().strftime("%Y-%m-%d")
+    url = f"https://api-liturgia-diaria.vercel.app/?date={hoje}"
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception("Erro ao buscar dados da API")
 
-def dividir_em_blocos_flexivel(texto):
-    # Regex para encontrar títulos de blocos
-    padroes = [
-        ("leitura", r"(leitura[^:]*:?)", "📖"),
-        ("evangelho", r"(proclamação do evangelho[^:]*:?)", "✝️"),
-        ("reflexao", r"(reflex[aã]o[^:]*:?)", "🕊️")
-    ]
-    texto_lower = texto.lower()
-    indices = {}
-    for nome, padrao, _ in padroes:
-        match = re.search(padrao, texto_lower)
-        if match:
-            indices[nome] = match.start()
-    # Ordenar blocos encontrados
-    blocos = {}
-    nomes_encontrados = sorted(indices.items(), key=lambda x: x[1])
-    for i, (nome, idx) in enumerate(nomes_encontrados):
-        start = idx
-        end = nomes_encontrados[i+1][1] if i+1 < len(nomes_encontrados) else len(texto)
-        blocos[nome] = texto[start:end].strip()
-    # Garantir que todos existam
-    leitura = blocos.get("leitura", "")
-    evangelho = blocos.get("evangelho", "")
-    reflexao = blocos.get("reflexao", "")
-    return leitura, evangelho, reflexao
-
-def formatar_bloco(titulo, texto, emoji):
-    if not texto:
-        return ""
-    return f"{emoji} {titulo}:\n{texto.strip()}\n"
+    dados = response.json()
+    dia = dados["today"]
+    titulo = limpar_html(dia["entry_title"])
+    leitura = f"{dia['readings']['first_reading']['title']}\\n{dia['readings']['first_reading']['head']}\\n{dia['readings']['first_reading']['text']}\\n{dia['readings']['first_reading']['footer']}"
+    evangelho = f"{dia['readings']['gospel']['title']}\\n{dia['readings']['gospel']['head_title']}\\n{dia['readings']['gospel']['text']}\\n{dia['readings']['gospel']['footer']}"
+    salmo = f"{dia['readings']['psalm']['title']}\\nR: {dia['readings']['psalm']['response']}\\n" + "\\n".join(dia['readings']['psalm']['content_psalm'])
+    return titulo, hoje, leitura, evangelho, salmo
 
 def dividir_bloco_em_mensagens(titulo, texto, emoji, limite=2000):
     if not texto:
         return []
     header = f"{emoji} {titulo}:\n"
     blocos = []
-    paragrafos = texto.split('\n')
+    paragrafos = texto.split('\\n')
     bloco_atual = header
     header_usado = False
     for p in paragrafos:
         p = p.strip()
         if not p:
             continue
-        # Se o parágrafo for maior que o limite, quebrar o parágrafo
         while len(p) > (limite if header_usado else limite - len(header)):
             parte = p[:(limite if header_usado else limite - len(header))]
             if not header_usado:
@@ -145,104 +88,118 @@ def dividir_bloco_em_mensagens(titulo, texto, emoji, limite=2000):
             else:
                 blocos.append(parte)
             p = p[(limite if header_usado else limite - len(header)):]
-        # Se adicionar o parágrafo excede o limite, salva o bloco e começa outro
         if len(bloco_atual) + len(p) + 1 > limite:
             blocos.append(bloco_atual.strip())
             bloco_atual = ''
             header_usado = True
         if bloco_atual:
-            bloco_atual += '\n' + p
+            bloco_atual += '\\n' + p
         else:
             bloco_atual = p
     if bloco_atual.strip():
         blocos.append(bloco_atual.strip())
     return blocos
 
-# Build the Discord embed message
-def build_embed(title, date, sec):
-    embed = discord.Embed(
-        title=f"📖 Palavra do Dia – {title}",
-        description=f"🗓️ {date}",
-        color=0x2E86C1
-    )
-    if sec["leitura"]:
-        embed.add_field(name="📖 Leitura", value=sec["leitura"][:1024], inline=False)
-    if sec["evangelho"]:
-        embed.add_field(name="✝️ Evangelho", value=sec["evangelho"][:1024], inline=False)
-    if sec["reflexao"]:
-        embed.add_field(name="🕊️ Reflexão", value=sec["reflexao"][:1024], inline=False)
-    return embed
-
-def dividir_mensagem(texto, header=None, limite=1500):
-    # Divide o texto em parágrafos
-    paragrafos = texto.split('\n\n')
-    blocos = []
-    bloco_atual = ''
-    for i, p in enumerate(paragrafos):
-        p = p.strip()
-        if not p:
-            continue
-        # Se for o primeiro bloco e tiver header
-        if not blocos and header:
-            bloco_atual = header
-        # Se adicionar o parágrafo excede o limite, salva o bloco e começa outro
-        if len(bloco_atual) + len(p) + 2 > limite:
-            if bloco_atual.strip():
-                blocos.append(bloco_atual.strip())
-            bloco_atual = ''
-            # Se for novo bloco e header já foi, não repete header
-        if bloco_atual:
-            bloco_atual += '\n\n' + p
-        else:
-            bloco_atual = p
-    if bloco_atual.strip():
-        blocos.append(bloco_atual.strip())
-    return blocos
-
-# Função para formatar todas as mensagens a serem enviadas
-def formatar_mensagens(title_str, date_str, leitura, evangelho, reflexao):
+def formatar_mensagens(title_str, date_str, leitura, evangelho, salmo):
     mensagens = []
-    mensagens.append(f"📖 Palavra do Dia – {title_str}\n🗓️ {date_str}")
+    mensagens.append(f"📖 Palavra do Dia – {title_str}\\n🗓️ {date_str}")
     mensagens.extend(dividir_bloco_em_mensagens("Leitura", leitura, "📖"))
+    mensagens.extend(dividir_bloco_em_mensagens("Salmo", salmo, "🎶"))
     mensagens.extend(dividir_bloco_em_mensagens("Evangelho", evangelho, "✝️"))
-    mensagens.extend(dividir_bloco_em_mensagens("Reflexão", reflexao, "🕊️"))
     return mensagens
 
-# Função principal que busca e envia a mensagem
 async def fetch_and_send(force_send=False):
     try:
-        feed = feedparser.parse(RSS_URL)
-        entry = feed.entries[0]
-        if not force_send and entry.id in sent_guids:
-            print("[INFO] Já enviado:", entry.title)
-            return
+        hoje = date.today().strftime("%Y-%m-%d")
+        url = f"https://api-liturgia-diaria.vercel.app/?date={hoje}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise Exception("Erro ao buscar dados da API")
 
-        descricao_html = entry.description
-        texto_limpo = limpar_html(descricao_html)
-        leitura, evangelho, reflexao = dividir_em_blocos_flexivel(texto_limpo)
-        date_str = entry.published
-        title_str = entry.title
-        mensagens = formatar_mensagens(title_str, date_str, leitura, evangelho, reflexao)
+        dados = response.json()
+        dia = dados["today"]
 
+        entry_title = limpar_html(dia.get("entry_title", ""))
+        color_lit = dia.get("color", "branco").lower()
+        date_str = dia.get("date", hoje)
+
+        leitura = (
+            f"{dia['readings']['first_reading']['head']}\n\n"
+            f"{dia['readings']['first_reading']['text']}\n\n"
+            f"{dia['readings']['first_reading']['footer']}"
+        ).replace("\\n", "\n")
+
+        salmo = (
+            f"{dia['readings']['psalm']['title']}\n\n"
+            f"{dia['readings']['psalm']['response']}\n\n" +
+            "\n".join(dia['readings']['psalm']['content_psalm'])
+        ).replace("\\n", "\n")
+
+        evangelho = (
+            f"{dia['readings']['gospel']['head_title']}\n\n"
+            f"{dia['readings']['gospel']['text']}\n\n"
+            f"{dia['readings']['gospel']['footer']}"
+        ).replace("\\n", "\n")
+
+        cores = {
+            "verde": 0x228B22,
+            "vermelho": 0xB22222,
+            "roxo": 0x800080,
+            "branco": 0xF8F8FF,
+            "rosa": 0xFFC0CB,
+            "preto": 0x111111
+        }
+        cor_embed = cores.get(color_lit, 0xAAAAAA)
+
+        embed = discord.Embed(
+            title="📜 Proclamação da Liturgia",
+            description=(
+                f"{entry_title}\n"
+                f"📅 {date_str}\n"
+                f"🕯️ Cor litúrgica: **{color_lit.capitalize()}**"
+            ),
+            color=cor_embed
+        )
+
+
+        def cortar(texto):
+            return texto if len(texto) < 1024 else texto[:1020] + "..."
+
+        embed.add_field(name="📖 Letanía da Palavra", value=cortar(leitura), inline=False)
+        embed.add_field(name="🎶 Salmodia Real", value=cortar(salmo), inline=False)
+        embed.add_field(name="✝️ Evangelho Sagrado", value=cortar(evangelho), inline=False)
+
+        embed.set_footer(text="Scriptor Sacrum · O Escriba da Aurora")
+        embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Emblem_of_the_Holy_See_%28no_background%29.svg/1510px-Emblem_of_the_Holy_See_%28no_background%29.svg.png")
+
+        # Envio para todos os canais
         for guild_id, channel_id in config.items():
             channel = client.get_channel(int(channel_id))
             if channel:
-                print(f"[DEBUG] Enviando para canal: {channel.name} ({guild_id})")
-                for idx, msg in enumerate(mensagens):
-                    print(f"[DEBUG] Mensagem {idx+1}:\n{msg}\n{'-'*40}")
-                    await channel.send(msg)
-                print(f"[SUCESSO] Enviado para {channel.name} ({guild_id})")
+                await channel.send(embed=embed)
+                print(f"[SUCESSO] Liturgia enviada para {channel.name}")
+
+                # Se houver meditação no campo "extra"
+                extra = dia.get("extra", [])
+                if extra:
+                    meditacao = "\n".join([limpar_html(l) for l in extra if l.strip()])
+                    if meditacao:
+                        embed_meditacao = discord.Embed(
+                            title="🕊️ Meditação do Dia",
+                            description=meditacao,
+                            color=0x7FDBFF
+                        )
+                        embed_meditacao.set_footer(text="Scriptor Sacrum · O Escriba da Aurora")
+                        embed_meditacao.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Emblem_of_the_Holy_See_%28no_background%29.svg/1510px-Emblem_of_the_Holy_See_%28no_background%29.svg.png")
+                        await channel.send(embed=embed_meditacao)
+                        print(f"[SUCESSO] Meditação enviada para {channel.name}")
             else:
                 print(f"[ERRO] Canal não encontrado para guild {guild_id}")
-
-        if not force_send:
-            sent_guids.add(entry.id)
-            save_guids()
 
     except Exception as e:
         print("[ERRO]", str(e))
 
-# Evento: quando o bot está pronto
+
 @client.event
 async def on_ready():
     print(f"[INFO] Bot conectado como {client.user}")
@@ -251,25 +208,18 @@ async def on_ready():
     scheduler.start()
     print("[INFO] Agendamento iniciado.")
 
-# Evento: quando o bot recebe mensagens
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
-
     if message.content.lower().startswith("!definir"):
         guild_id = str(message.guild.id)
         channel_id = str(message.channel.id)
         config[guild_id] = channel_id
         save_config(config)
-        await message.channel.send("✅ Este canal foi definido para receber a Palavra do Dia diariamente!")
-
+        await message.channel.send("✅ Canal definido para receber a Liturgia Diária!")
     elif message.content.lower().startswith("!testar"):
-        print("[DEBUG] Comando !testar recebido de:", message.author)
         await fetch_and_send(force_send=True)
 
-# Manter o bot vivo
 keep_alive()
-
-# Executa o bot
 client.run(TOKEN)
