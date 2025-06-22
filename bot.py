@@ -193,6 +193,100 @@ async def fetch_and_send(force_send=False):
                         embed_meditacao.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Emblem_of_the_Holy_See_%28no_background%29.svg/1510px-Emblem_of_the_Holy_See_%28no_background%29.svg.png")
                         await channel.send(embed=embed_meditacao)
                         print(f"[SUCESSO] Meditação enviada para {channel.name}")
+
+                # Terço do dia
+                misterios_do_terco = {
+                    "segunda-feira": {
+                        "tipo": "Gozosos",
+                        "mistérios": [
+                            {"título": "A Anunciação do Anjo a Maria", "descrição": "O anjo Gabriel anuncia a Maria que ela será a Mãe do Salvador. (Lc 1,26-38)"},
+                            {"título": "A Visitação de Maria a Isabel", "descrição": "Maria visita sua prima Isabel, que também espera um filho (João Batista). (Lc 1,39-56)"},
+                            {"título": "O Nascimento de Jesus em Belém", "descrição": "Jesus nasce em um estábulo, em humildade e pobreza. (Lc 2,1-20)"},
+                            {"título": "A Apresentação de Jesus no Templo", "descrição": "Maria e José apresentam Jesus ao Senhor no templo. (Lc 2,22-38)"},
+                            {"título": "O Encontro do Menino Jesus no Templo", "descrição": "Jesus, com 12 anos, é encontrado entre os doutores da Lei. (Lc 2,41-50)"}
+                        ]
+                    },
+                    "terça-feira": {
+                        "tipo": "Dolorosos",
+                        "mistérios": [
+                            {"título": "A Agonia de Jesus no Horto", "descrição": "Jesus sua sangue e reza ao Pai antes de ser preso. (Mt 26,36-46)"},
+                            {"título": "A Flagelação de Jesus", "descrição": "Jesus é cruelmente açoitado. (Jo 19,1)"},
+                            {"título": "A Coroação de Espinhos", "descrição": "Soldados zombam de Jesus, coroando-O com espinhos. (Mt 27,27-31)"},
+                            {"título": "Jesus Carrega a Cruz até o Calvário", "descrição": "Jesus carrega Sua cruz até o lugar da crucificação. (Jo 19,17)"},
+                            {"título": "A Crucificação e Morte de Jesus", "descrição": "Jesus morre na cruz para a salvação da humanidade. (Lc 23,33-46)"}
+                        ]
+                    },
+                    "quarta-feira": {
+                        "tipo": "Gloriosos",
+                        "mistérios": [
+                            {"título": "A Ressurreição de Jesus", "descrição": "Jesus ressuscita dos mortos ao terceiro dia. (Mt 28,1-10)"},
+                            {"título": "A Ascensão de Jesus ao Céu", "descrição": "Jesus sobe aos céus à vista dos apóstolos. (At 1,6-11)"},
+                            {"título": "A Vinda do Espírito Santo", "descrição": "O Espírito Santo desce sobre os apóstolos. (At 2,1-4)"},
+                            {"título": "A Assunção de Maria", "descrição": "Maria é elevada em corpo e alma ao Céu. (Ap 12)"},
+                            {"título": "A Coroação de Maria", "descrição": "Maria é coroada por Deus como Rainha do Céu e da Terra. (Ap 12,1)"}
+                        ]
+                    },
+                    "quinta-feira": {
+                        "tipo": "Luminosos",
+                        "mistérios": [
+                            {"título": "O Batismo de Jesus no Jordão", "descrição": "Jesus é batizado por João Batista e o Espírito Santo desce sobre Ele. (Mt 3,13-17)"},
+                            {"título": "As Bodas de Caná", "descrição": "Jesus realiza seu primeiro milagre, transformando água em vinho. (Jo 2,1-12)"},
+                            {"título": "O Anúncio do Reino de Deus", "descrição": "Jesus prega, cura e chama todos à conversão. (Mc 1,14-15)"},
+                            {"título": "A Transfiguração de Jesus", "descrição": "Jesus aparece em glória com Moisés e Elias no monte Tabor. (Lc 9,28-36)"},
+                            {"título": "A Instituição da Eucaristia", "descrição": "Jesus oferece seu Corpo e Sangue sob o pão e o vinho na Última Ceia. (Lc 22,14-20)"}
+                        ]
+                    },
+                    "sexta-feira": {
+                        "tipo": "Dolorosos",
+                        "mistérios": [
+                            {"título": "A Agonia de Jesus no Horto", "descrição": "Jesus sua sangue e reza ao Pai antes de ser preso. (Mt 26,36-46)"},
+                            {"título": "A Flagelação de Jesus", "descrição": "Jesus é cruelmente açoitado. (Jo 19,1)"},
+                            {"título": "A Coroação de Espinhos", "descrição": "Soldados zombam de Jesus, coroando-O com espinhos. (Mt 27,27-31)"},
+                            {"título": "Jesus Carrega a Cruz até o Calvário", "descrição": "Jesus carrega Sua cruz até o lugar da crucificação. (Jo 19,17)"},
+                            {"título": "A Crucificação e Morte de Jesus", "descrição": "Jesus morre na cruz para a salvação da humanidade. (Lc 23,33-46)"}
+                        ]
+                    },
+                    "sábado": {
+                        "tipo": "Gozosos",
+                        "mistérios": [
+                            {"título": "A Anunciação do Anjo a Maria", "descrição": "O anjo Gabriel anuncia a Maria que ela será a Mãe do Salvador. (Lc 1,26-38)"},
+                            {"título": "A Visitação de Maria a Isabel", "descrição": "Maria visita sua prima Isabel, que também espera um filho (João Batista). (Lc 1,39-56)"},
+                            {"título": "O Nascimento de Jesus em Belém", "descrição": "Jesus nasce em um estábulo, em humildade e pobreza. (Lc 2,1-20)"},
+                            {"título": "A Apresentação de Jesus no Templo", "descrição": "Maria e José apresentam Jesus ao Senhor no templo. (Lc 2,22-38)"},
+                            {"título": "O Encontro do Menino Jesus no Templo", "descrição": "Jesus, com 12 anos, é encontrado entre os doutores da Lei. (Lc 2,41-50)"}
+                        ]
+                    },
+                    "domingo": {
+                        "tipo": "Gloriosos",
+                        "observação": "Pode-se rezar os Luminosos no Tempo Comum, se preferir.",
+                        "mistérios": [
+                            {"título": "A Ressurreição de Jesus", "descrição": "Jesus ressuscita dos mortos ao terceiro dia. (Mt 28,1-10)"},
+                            {"título": "A Ascensão de Jesus ao Céu", "descrição": "Jesus sobe aos céus à vista dos apóstolos. (At 1,6-11)"},
+                            {"título": "A Vinda do Espírito Santo", "descrição": "O Espírito Santo desce sobre os apóstolos. (At 2,1-4)"},
+                            {"título": "A Assunção de Maria", "descrição": "Maria é elevada em corpo e alma ao Céu. (Ap 12)"},
+                            {"título": "A Coroação de Maria", "descrição": "Maria é coroada por Deus como Rainha do Céu e da Terra. (Ap 12,1)"}
+                        ]
+                    }
+                }
+                dias_pt = [
+                    "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"
+                ]
+                dia_semana = dias_pt[date.today().weekday()]
+                terco = misterios_do_terco[dia_semana]
+                descricao_terco = f"**Mistérios {terco['tipo']}**\n\n"
+                for idx, misterio in enumerate(terco["mistérios"], 1):
+                    descricao_terco += f"{idx}. **{misterio['título']}**\n{misterio['descrição']}\n\n"
+                if 'observação' in terco:
+                    descricao_terco += f"\n_Observação: {terco['observação']}_"
+                embed_terco = discord.Embed(
+                    title=f"📿 Terço do Dia – {dia_semana.capitalize()}",
+                    description=descricao_terco,
+                    color=0xFFD700
+                )
+                embed_terco.set_footer(text="Scriptor Sacrum · O Escriba da Aurora")
+                embed_terco.set_thumbnail(url="https://yata-apix-9da23243-671c-42a8-9014-41a94dafae05.s3-object.locaweb.com.br/ae792e6635b3427f9ab1f5ed4774e121.png")
+                await channel.send(embed=embed_terco)
+                print(f"[SUCESSO] Terço enviado para {channel.name}")
             else:
                 print(f"[ERRO] Canal não encontrado para guild {guild_id}")
 
